@@ -48,7 +48,7 @@ static int write_root_inode(int fd) {
         return -1;
     }
 
-    printf("root directory inode written succesfully.\n");
+    printf("Root directory inode written succesfully.\n");
     return 0;
 }
 
@@ -58,10 +58,10 @@ static int write_welcome_inode(int fd, const struct assoofs_inode_info *i) {
 
     ret = write(fd, i, sizeof(*i));
     if (ret != sizeof(*i)) {
-        printf("The welcomefile inode was not written properly.\n");
+        printf("The welcome file inode was not written properly.\n");
         return -1;
     }
-    printf("welcomefile inode written succesfully.\n");
+    printf("Welcome file inode written succesfully.\n");
 
     nbytes = ASSOOFS_DEFAULT_BLOCK_SIZE - (sizeof(*i) * 2);
     ret = lseek(fd, nbytes, SEEK_CUR);
@@ -79,18 +79,18 @@ int write_dirent(int fd, const struct assoofs_dir_record_entry *record) {
 
     ret = write(fd, record, nbytes);
     if (ret != nbytes) {
-        printf("Writing the rootdirectory datablock (name+inode_no pair for welcomefile) has failed.\n");
+        printf("Writing the root directory datablock (name+inode_no pair for welcome file) has failed.\n");
         return -1;
     }
-    printf("root directory datablocks (name+inode_no pair for welcomefile) written succesfully.\n");
+    printf("Root directory datablocks (name+inode_no pair for welcomefile) written succesfully.\n");
 
     nbytes = ASSOOFS_DEFAULT_BLOCK_SIZE - sizeof(*record);
     ret = lseek(fd, nbytes, SEEK_CUR);
     if (ret == (off_t)-1) {
-        printf("Writing the padding for rootdirectory children datablock has failed.\n");
+        printf("Writing the padding for root directory children datablock has failed.\n");
         return -1;
     }
-    printf("Padding after the rootdirectory children written succesfully.\n");
+    printf("Padding after the root directory children written succesfully.\n");
     return 0;
 }
 
@@ -102,7 +102,7 @@ int write_block(int fd, char *block, size_t len) {
         printf("Writing file body has failed.\n");
         return -1;
     }
-    printf("block has been written succesfully.\n");
+    printf("Block has been written succesfully.\n");
     return 0;
 }
 
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
 {
     int fd;
     ssize_t ret;
-    char welcomefile_body[] = "Hola mundo, os saludo desde un sistema de ficheros ASSOOFS.\n";
+    char welcomefile_body[] = "Hola mundo, os saludo desde un sistema de ficheros" ASSOOFS_NAME ".\n";
     
     struct assoofs_inode_info welcome = {
         .mode = S_IFREG,

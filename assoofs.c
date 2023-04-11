@@ -79,7 +79,7 @@ static const struct super_operations assoofs_sops = {
  *  Inicialización del superbloque
  */
 int assoofs_fill_super(struct super_block *sb, void *data, int silent) {   
-    printk(KERN_INFO "assoofs_fill_super request\n");
+    printk(KERN_INFO ASSOOFS_NAME "_fill_super request\n");
     // 1.- Leer la información persistente del superbloque del dispositivo de bloques  
     // 2.- Comprobar los parámetros del superbloque
     // 3.- Escribir la información persistente leída del dispositivo de bloques en el superbloque sb, incluído el campo s_op con las operaciones que soporta.
@@ -92,7 +92,7 @@ int assoofs_fill_super(struct super_block *sb, void *data, int silent) {
  */
 static struct dentry *assoofs_mount(struct file_system_type *fs_type, int flags, const char *dev_name, void *data) {
     struct dentry *ret;
-    printk(KERN_INFO "assoofs_mount request\n");
+    printk(KERN_INFO ASSOOFS_NAME "_mount request\n");
     ret = mount_bdev(fs_type, flags, dev_name, data, assoofs_fill_super);
     // Control de errores a partir del valor de ret. En este caso se puede utilizar la macro IS_ERR: if (IS_ERR(ret)) ...
     return ret;
@@ -103,14 +103,14 @@ static struct dentry *assoofs_mount(struct file_system_type *fs_type, int flags,
  */
 static struct file_system_type assoofs_type = {
     .owner   = THIS_MODULE,
-    .name    = "assoofs",
+    .name    = ASSOOFS_NAME,
     .mount   = assoofs_mount,
     .kill_sb = kill_block_super,
 };
 
 static int __init assoofs_init(void) {
     int ret;
-    printk(KERN_INFO "assoofs_init request\n");
+    printk(KERN_INFO ASSOOFS_NAME "_init request\n");
     ret = register_filesystem(&assoofs_type);
     // Control de errores a partir del valor de ret
     return ret;
@@ -118,7 +118,7 @@ static int __init assoofs_init(void) {
 
 static void __exit assoofs_exit(void) {
     int ret;
-    printk(KERN_INFO "assoofs_exit request\n");
+    printk(KERN_INFO ASSOOFS_NAME "_exit request\n");
     ret = unregister_filesystem(&assoofs_type);
     // Control de errores a partir del valor de ret
 }
