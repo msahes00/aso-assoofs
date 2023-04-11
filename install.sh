@@ -14,10 +14,21 @@ make
 
 # install the kernel module to the kernel
 echo -e "\033[32m INSTALLING KERNEL MODULE \033[0m"
+insmod assoofs.ko
 
-# create a test file
-echo -e "\033[32m CREATING TEST FILE \033[0m"
-# TODO
+# create a test iso
+echo -e "\033[32m CREATING TEST ISO \033[0m"
+dd bs=4096 count=100 if=/dev/zero of=assoofs.iso
+./mkassofs assoofs.iso
+
+# mount the iso
+echo -e "\033[32m MOUNTING TEST ISO \033[0m"
+mkdir mnt
+mount -o loop -t assoofs assoofs.iso mnt
+
+# check messages
+echo -e "\033[32m PRINTING MESSAGES \033[0m"
+dmesg
 
 # show a message
 echo "DONE"

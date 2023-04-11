@@ -63,18 +63,27 @@ sudo su
 
 # uninstall the kernel module to the kernel
 echo -e "\033[32m UNINSTALLING KERNEL MODULE \033[0m"
+rmmod assoofs.ko
 
 
 # clean workspace
 echo -e "\033[32m CLEANING FILES \033[0m"
 make clean
 
-# prompt to delete the test file
-echo -e "\033[32m REMOVING TEST FILE \033[0m"
-showConfirm "Delete test file? (yes / no)"
+# prompt to delete the test iso
+echo -e "\033[32m REMOVING TEST ISO \033[0m"
+showConfirm "Unmount test iso? (yes / no)"
 if [ $option -eq "0" ] ; then
 
-	# TODO
+	umount assoofs.iso mnt
+	rmdir mnt
+
+	showConfirm "Delete test iso? (yes / no)"
+	if [ $option -eq "0" ] ; then
+
+		rm assoofs.iso
+
+	fi
 
 fi
 
@@ -86,6 +95,10 @@ if [ $option -eq "0" ] ; then
 	# TODO
 
 fi
+
+# check messages
+echo -e "\033[32m PRINTING MESSAGES \033[0m"
+dmesg
 
 # show a message
 echo "DONE"
