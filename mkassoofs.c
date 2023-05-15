@@ -13,7 +13,7 @@
 
 static int write_superblock(int fd) {
     struct assoofs_super_block_info sb = {
-        .version = 1,
+        .version = ASSOOFS_VERSION,
         .magic = ASSOOFS_MAGIC,
         .block_size = ASSOOFS_DEFAULT_BLOCK_SIZE,
         .inodes_count = WELCOMEFILE_INODE_NUMBER,

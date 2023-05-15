@@ -59,23 +59,24 @@ function showConfirm() {
 
 # acquire root
 echo -e "\033[32m ACQUIRING ROOT \033[0m"
-sudo su
+sudo /bin/bash -c ":"
 
 # uninstall the kernel module to the kernel
 echo -e "\033[32m UNINSTALLING KERNEL MODULE \033[0m"
-rmmod assoofs.ko
+sudo rmmod assoofs.ko
 
 
 # clean workspace
 echo -e "\033[32m CLEANING FILES \033[0m"
-make clean
+sudo make clean
 
 # prompt to delete the test iso
 echo -e "\033[32m REMOVING TEST ISO \033[0m"
+
 showConfirm "Unmount test iso? (yes / no)"
 if [ $option -eq "0" ] ; then
 
-	umount assoofs.iso mnt
+	sudo umount assoofs.iso mnt
 	rmdir mnt
 
 	showConfirm "Delete test iso? (yes / no)"
@@ -89,16 +90,17 @@ fi
 
 # prompt to uninstall dependencies
 echo -e "\033[32m UNINSTALLING DEPENDENCIES \033[0m"
+
 showConfirm "Uninstall dependencies? (yes / no)"
 if [ $option -eq "0" ] ; then
 
-	# TODO
+	sudo apt autoremove build-essential -y
 
 fi
 
 # check messages
 echo -e "\033[32m PRINTING MESSAGES \033[0m"
-dmesg
+sudo dmesg | grep "assoofs"
 
 # show a message
 echo "DONE"
