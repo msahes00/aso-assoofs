@@ -15,14 +15,14 @@ static int write_superblock(int fd) {
     struct assoofs_super_block_info sb = {
         .version = ASSOOFS_VERSION,
         .magic = ASSOOFS_MAGIC,
-        .block_size = ASSOOFS_DEFAULT_BLOCK_SIZE,
+        .block_size = ASSOOFS_BLOCK_SIZE,
         .inodes_count = WELCOMEFILE_INODE_NUMBER,
         .free_blocks = (~0) & ~(15),
     };
     ssize_t ret;
 
     ret = write(fd, &sb, sizeof(sb));
-    if (ret != ASSOOFS_DEFAULT_BLOCK_SIZE) {
+    if (ret != ASSOOFS_BLOCK_SIZE) {
         printf("Bytes written [%d] are not equal to the default block size.\n", (int)ret);
         return -1;
     }
@@ -63,7 +63,7 @@ static int write_welcome_inode(int fd, const struct assoofs_inode_info *i) {
     }
     printf("Welcome file inode written succesfully.\n");
 
-    nbytes = ASSOOFS_DEFAULT_BLOCK_SIZE - (sizeof(*i) * 2);
+    nbytes = ASSOOFS_BLOCK_SIZE - (sizeof(*i) * 2);
     ret = lseek(fd, nbytes, SEEK_CUR);
     if (ret == (off_t)-1) {
         printf("The padding bytes are not written properly.\n");
@@ -84,7 +84,7 @@ int write_dirent(int fd, const struct assoofs_dir_record_entry *record) {
     }
     printf("Root directory datablocks (name+inode_no pair for welcomefile) written succesfully.\n");
 
-    nbytes = ASSOOFS_DEFAULT_BLOCK_SIZE - sizeof(*record);
+    nbytes = ASSOOFS_BLOCK_SIZE - sizeof(*record);
     ret = lseek(fd, nbytes, SEEK_CUR);
     if (ret == (off_t)-1) {
         printf("Writing the padding for root directory children datablock has failed.\n");
