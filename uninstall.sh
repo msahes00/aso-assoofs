@@ -94,7 +94,10 @@ echo -e "\033[32m UNINSTALLING DEPENDENCIES \033[0m"
 showConfirm "Uninstall dependencies? (yes / no)"
 if [ $option -eq "0" ] ; then
 
-	sudo apt autoremove build-essential -y
+	sudo apt autoremove build-essential dwarves -y
+	# TODO: update dependencies
+	#sudo add-apt-repository --remove universe -y
+	#rm /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 fi
 

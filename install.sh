@@ -6,10 +6,13 @@ sudo /bin/bash -c ":"
 
 # install dependencies
 echo -e "\033[32m INSTALLING DEPENDENCIES \033[0m"
-sudo apt install build-essential -y
+sudo add-apt-repository universe -y
+sudo apt install build-essential dwarves -y
+cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 # compile all files
 echo -e "\033[32m COMPILING FILES \033[0m"
+# TODO: use the linux repo to compile the module?
 sudo make
 
 # install the kernel module to the kernel
@@ -19,7 +22,7 @@ sudo insmod assoofs.ko
 # create a test iso
 echo -e "\033[32m CREATING TEST ISO \033[0m"
 sudo dd bs=4096 count=100 if=/dev/zero of=assoofs.iso
-sudo ./mkassofs assoofs.iso
+sudo ./mkassoofs assoofs.iso
 
 # mount the iso
 echo -e "\033[32m MOUNTING TEST ISO \033[0m"
