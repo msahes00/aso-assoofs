@@ -25,34 +25,35 @@
 #define error3(fmt, arg1, arg2, arg3)   printk(KERN_ERR ASSOOFS_NAME ": " fmt, arg1, arg2, arg3)    // Print an error message with 3 arguments
 
 
-
 /**
  * Function declarations
  */
 static int __init assoofs_init(void);
 static void __exit assoofs_exit(void);
 
+static struct dentry *assoofs_mount(struct file_system_type *fs_type, int flags, const char *dev_name, void *data);
+
+int assoofs_fill_super(struct super_block *sb, void *data, int silent);
 static void assoofs_kill_block_super(struct super_block *sb);
 
-static struct dentry *assoofs_mount(struct file_system_type *fs_type, int flags, const char *dev_name, void *data);
-int assoofs_fill_super(struct super_block *sb, void *data, int silent);
-
-struct assoofs_inode *assoofs_get_inode(struct super_block *sb, uint64_t inode_num);
-int assoofs_save_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode);
-int assoofs_delete_inode(struct inode *inode);
 static int assoofs_mkdir(struct user_namespace *mnt_userns, struct inode *dir , struct dentry *dentry, umode_t mode);
 static int assoofs_create(struct user_namespace *mnt_userns, struct inode *dir, struct dentry *dentry, umode_t mode, bool excl);
 struct dentry *assoofs_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flags);
-static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode, int inode_num);
 static int assoofs_iterate(struct file *file, struct dir_context *ctx);
+int assoofs_delete_inode(struct inode *inode);
 ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, loff_t * pos);
 ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t * pos);
+
+struct assoofs_inode *assoofs_get_inode(struct super_block *sb, uint64_t inode_num);
+int assoofs_save_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode);
+static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode, int inode_num);
 void *read_block(struct super_block *sb, struct buffer_head **bh, uint64_t number);
 
 
 /**
  * Some static structures
  */
+// Some filesystem metadata
 static struct file_system_type assoofs_type = {
 	.owner = THIS_MODULE,
 	.name = ASSOOFS_NAME,
@@ -60,25 +61,34 @@ static struct file_system_type assoofs_type = {
 	.kill_sb = assoofs_kill_block_super,
 };
 
+// Operations supported on the superblock
 static struct super_operations assoofs_sb_ops = {
 	.drop_inode = assoofs_delete_inode,
 };
 
+// Operations supported on inodes
 static struct inode_operations assoofs_inode_ops = {
 	.create = assoofs_create,
 	.lookup = assoofs_lookup,
 	.mkdir = assoofs_mkdir,
 };
 
+// Operations supported on directories
 static struct file_operations assoofs_dir_ops = {
 	.owner = THIS_MODULE,
 	.iterate = assoofs_iterate,
 };
 
+// Operations supported on regular files
 static struct file_operations assoofs_file_ops = {
 	.read = assoofs_read,
 	.write = assoofs_write,
 };
+
+// Superblock mutex
+static DEFINE_MUTEX(assoofs_super_lock);
+// Inode store mutex
+static DEFINE_MUTEX(assoofs_inode_lock);
 
 
 
@@ -86,11 +96,11 @@ static struct file_operations assoofs_file_ops = {
  * Read a block data from disk printing a message if it can't be read
  * NOTE: on successful read, it is necessary to release the buffer head after use
  */
-// TODO: Rethink as macro?
 void *read_block(struct super_block *sb, struct buffer_head **bh, uint64_t number) {
 
 	// read the buffer head and store it
-	struct buffer_head *tmp = sb_bread(sb, number);
+	struct buffer_head *tmp;
+	tmp = sb_bread(sb, number);
 
 	// verify the buffer head
 	if (!tmp) {
@@ -107,7 +117,7 @@ void *read_block(struct super_block *sb, struct buffer_head **bh, uint64_t numbe
 	*bh = tmp;
 
 	// return the requested data
-	return (*bh)->b_data;
+	return tmp->b_data;
 }
 
 /*
@@ -115,16 +125,30 @@ void *read_block(struct super_block *sb, struct buffer_head **bh, uint64_t numbe
  */
 ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t * pos) {
 
-	// get the assoofs inode and the superblock
+	// TODO: USE FILE MUTEXES FOR CONCURRENT READ-WRITE? (they are struct mutex as well)
+
+	// declare and get the assoofs inode and the superblock
 	struct assoofs_inode *inode = file->f_path.dentry->d_inode->i_private;
 	struct super_block *sb = file->f_path.dentry->d_inode->i_sb;
+
+	// declare other variables
 	struct buffer_head *bh;
+	char *buffer;
+
+	size_t left;
+	int nbytes;
+
+	info3("Trying to read %d bytes from file '%s', starting from byte %d\n", len, file->f_path.dentry->d_name.name, *pos);
 
 	// prevent reading data outside the file
-	if (*pos >= inode->file_size) return 0;
+	if (*pos >= inode->file_size) {
+	
+		error("Can't read from disk: Trying to read outside the file\n");
+		return 0;
+	}
 
 	// get the file block
-	char *buffer = (char *) read_block(sb, &bh, inode->data_block_number);
+	buffer = (char *) read_block(sb, &bh, inode->data_block_number);
 	
 	// return 0 if the block hasn't been read
 	if (!buffer) return 0;
@@ -133,10 +157,10 @@ ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t *
 	buffer += *pos;
 
 	// find the amount of bytes to read
-	size_t left = (size_t) inode->file_size - (size_t) *pos;
-	int nbytes = min(left, len);
+	left = (size_t) inode->file_size - (size_t) *pos;
+	nbytes = min(left, len);
 
-	// copy the buffer to the userspace buffer, checking for errors
+	// copy the data from the block buffer to the userspace buffer, checking for errors
 	if (copy_to_user(buf, buffer, nbytes)) {
 
 		error("Error copying file contents to the userspace buffer\n");
@@ -149,6 +173,8 @@ ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t *
 	// update the current position
 	*pos += nbytes;
 
+	info2("Read %d bytes from file '%s'\n", nbytes, file->f_path.dentry->d_name.name);
+
 	// release resources and return the amount of bytes read
 	brelse(bh);
 	return nbytes;
@@ -159,10 +185,17 @@ ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t *
  */
 ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, loff_t * pos) {
 	
-	// get the assoofs inode and the superblock
+	// TODO: USE FILE MUTEXES FOR CONCURRENT READ-WRITE? (they are struct mutex as well)
+
+	// declare and get the assoofs inode and the superblock
 	struct assoofs_inode *inode = file->f_path.dentry->d_inode->i_private;
 	struct super_block *sb = file->f_path.dentry->d_inode->i_sb;
-	
+
+	// declare some variables
+	struct buffer_head *bh;
+	char *buffer;
+
+	info3("Trying to write %d bytes from file '%s', starting from byte %d\n", len, file->f_path.dentry->d_name.name, *pos);
 	
 	// verify the amount of space to write
 	if (*pos + len >= ASSOOFS_BLOCK_SIZE) {
@@ -172,8 +205,7 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
 	}
 
 	// get the file block
-	struct buffer_head *bh;
-	char *buffer = (char *) read_block(sb, &bh, inode->data_block_number);
+	buffer = (char *) read_block(sb, &bh, inode->data_block_number);
 	
 	// return 0 if the block hasn't been read
 	if (!buffer) return 0;
@@ -202,6 +234,8 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
 	inode->file_size = *pos;
 	assoofs_save_inode(sb, inode);
 
+	info2("Written %d bytes to file '%s'\n", len, file->f_path.dentry->d_name.name);
+
 	// release resources and return the amount of bytes read
 	brelse(bh);
 	return len;
@@ -212,17 +246,24 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
  */
 static int assoofs_iterate(struct file *file, struct dir_context *ctx) {
 
-	info("Iterating over directory\n");
-
-	// get the inode and the superblock
+	// declare and get the inodes (linux and assoofs) the superblock
 	struct inode *inode = file->f_path.dentry->d_inode;
+	struct assoofs_inode *assoofs_inode = inode->i_private;
 	struct super_block *sb = inode->i_sb;
 
-	// check if the context is already created, exiting if it is not
-	if (ctx->pos) return 0;
+	// declare the rest of the variables
+	int i;
+	struct buffer_head *bh;
+	struct assoofs_dir_record_entry *record;
 
-	// get the assoofs inode
-	struct assoofs_inode *assoofs_inode = inode->i_private;
+	info1("Reading directory '%s' contents\n", file->f_path.dentry->d_name.name);
+
+	// check if the context is already created, exiting if it is not
+	if (ctx->pos) {
+
+		error("Directory context is not initialized\n");
+		return 0;
+	}
 
 	// check if the inode is a directory, exiting if its not
 	if (!S_ISDIR(assoofs_inode->mode)) {
@@ -231,12 +272,11 @@ static int assoofs_iterate(struct file *file, struct dir_context *ctx) {
 		return -1;
 	}
 
-	// read the directory record
-	struct buffer_head *bh;
-	struct assoofs_dir_record_entry *record = (struct assoofs_dir_record_entry *) read_block(sb, &bh, assoofs_inode->data_block_number);
+	// read the directory record from disk
+	record = (struct assoofs_dir_record_entry *) read_block(sb, &bh, assoofs_inode->data_block_number);
 
 	// iterate over all files in directory
-	for (int i = 0; i < assoofs_inode->dir_children_count; i++) {
+	for (i = 0; i < assoofs_inode->dir_children_count; i++) {
 
 		// add the file to the context
 		dir_emit(ctx, record->filename, ASSOOFS_FILENAME_MAX_LENGTH, record->inode_no, DT_UNKNOWN);
@@ -246,41 +286,12 @@ static int assoofs_iterate(struct file *file, struct dir_context *ctx) {
 		record++;
 	}
 
+	info2("Directory '%s' read. Found %d inodes\n", file->f_path.dentry->d_name.name, i);
+
 	// release resources and return
 	brelse(bh);
 	return 0;
 }
-
-/**
- * Convert an assoofs inode to an standard inode
- */
-static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode, int inode_num) {
-	
-	// create the standard inode
-	struct inode *inode = new_inode(sb);
-	
-	// initialize it
-	inode->i_ino = inode_num;
-	inode->i_sb = sb;
-	inode->i_op = &assoofs_inode_ops;
-	inode->i_private = assoofs_inode;
-
-	struct timespec64 time_now = current_time(inode);
-	inode->i_atime = time_now;
-	inode->i_mtime = time_now;
-	inode->i_ctime = time_now;
-
-	// use the correct type (directory or file)
-	if (S_ISDIR(assoofs_inode->mode))
-		inode->i_fop = &assoofs_dir_ops;
-	else if (S_ISREG(assoofs_inode->mode))
-		inode->i_fop = &assoofs_file_ops;
-	else
-		error("Error converting inode: unknown inode type.\n");
-
-	return inode;
-}
-
 
 /*
  * Find a children file inside a folder
@@ -291,29 +302,35 @@ struct dentry *assoofs_lookup(struct inode *parent_inode, struct dentry *child_d
 	struct super_block *sb = parent_inode->i_sb;
 	struct assoofs_inode *parent = parent_inode->i_private;
 
-	info2("Looking up inode %llu and block %llu\n", parent->inode_no, parent->data_block_number);
-
-	// get the parent directory record block
+	// declare some variables
+	int i;
 	struct buffer_head *bh;
-	struct assoofs_dir_record_entry *record = (struct assoofs_dir_record_entry *) read_block(sb, &bh, parent->data_block_number);
+	struct assoofs_dir_record_entry *record;
+	struct inode *inode;
+	struct assoofs_inode *assoofs_inode;
+
+	info3("Looking up file '%s' inside inode %llu (data block %llu)\n", child_dentry->d_name.name, parent->inode_no, parent->data_block_number);
+
+	// get the parent directory record from disk
+	record = (struct assoofs_dir_record_entry *) read_block(sb, &bh, parent->data_block_number);
 	
 	// return NULL if the block hasn't been read
 	if (!record) return NULL;
 
 	// iterate over all the files in the directory
-	for (int i = 0; i < parent->dir_children_count; i++) {
-		
-		info2("Lookup file '%s' (inode %llu)\n", record->filename, record->inode_no);
+	for (i = 0; i < parent->dir_children_count; i++) {
 
 		// check if the file is the requested
 		if (!strcmp(record->filename, child_dentry->d_name.name)) {
+
+			info3("File '%s' (inode %llu) found in inode %llu\n", child_dentry->d_name.name, record->inode_no, parent->inode_no);
 			
 			// get the true inode for the file
-			struct inode *inode = assoofs_convert_inode(sb, assoofs_get_inode(sb, record->inode_no), record->inode_no);
+			inode = assoofs_convert_inode(sb, assoofs_get_inode(sb, record->inode_no), record->inode_no);
 
 			// initialize the inode
-			struct assoofs_inode *tmp_inode = (struct assoofs_inode *) inode->i_private;
-			inode_init_owner(sb->s_user_ns, inode, parent_inode, tmp_inode->mode);
+			assoofs_inode = (struct assoofs_inode *) inode->i_private;
+			inode_init_owner(sb->s_user_ns, inode, parent_inode, assoofs_inode->mode);
 			
 			// add it to the child entry
 			d_add(child_dentry, inode);
@@ -328,14 +345,158 @@ struct dentry *assoofs_lookup(struct inode *parent_inode, struct dentry *child_d
 	}
 
 	// print an error message if its not found and return
-	error1("No inode found for the filename '%s'\n", child_dentry->d_name.name);
+	error2("Filename '%s' not found in inode %llu\n", child_dentry->d_name.name, parent->inode_no);
 	brelse(bh);
 	return NULL;
 }
 
-int simplefs_sb_get_a_freeblock(struct super_block *vsb, uint64_t * out)
-{
-	struct simplefs_super_block *sb =  = sb->s_fs_info;
+/**
+ * Convert an assoofs inode to an standard inode
+ */
+static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode, int inode_num) {
+
+	
+	// declare the variables
+	struct timespec64 time_now;
+	struct inode *inode;
+
+	info2("Converting inode (%llu -> %lu)\n", assoofs_inode->inode_no, inode_num);
+
+	// create the linux inode and initialize it
+	inode = new_inode(sb);
+
+	inode->i_ino = inode_num;
+	inode->i_sb = sb;
+	inode->i_op = &assoofs_inode_ops;
+	inode->i_private = assoofs_inode;
+
+	time_now = current_time(inode);
+	inode->i_atime = time_now;
+	inode->i_mtime = time_now;
+	inode->i_ctime = time_now;
+
+	// use the correct type (directory or file)
+	if (S_ISDIR(assoofs_inode->mode))
+		inode->i_fop = &assoofs_dir_ops;
+	else if (S_ISREG(assoofs_inode->mode))
+		inode->i_fop = &assoofs_file_ops;
+	else
+		error("Error converting inode: unknown inode type.\n");
+
+	info2("Inode (%llu, %lu) converted\n", assoofs_inode->inode_no, inode_num);
+
+	return inode;
+}
+
+
+void assoofs_sb_sync(struct super_block *sb) {
+	struct buffer_head *bh;
+	struct assoofs_super_block *assoofs_sb = sb->s_fs_info;
+
+	bh = sb_bread(sb, ASSOOFS_SUPERBLOCK_BLOCK_NUMBER);
+	// BUG_ON(!bh);
+
+	bh->b_data = (char *)assoofs_sb;
+	mark_buffer_dirty(bh);
+	sync_dirty_buffer(bh);
+	brelse(bh);
+}
+
+
+void assoofs_inode_add(struct super_block *sb, struct assoofs_inode *inode) {
+	struct assoofs_super_block *assoofs_sb = sb->s_fs_info;
+	struct buffer_head *bh;
+	struct assoofs_inode *inode_iterator;
+/*
+	if (mutex_lock_interruptible(&simplefs_inodes_mgmt_lock)) {
+		sfs_trace("Failed to acquire mutex lock\n");
+		return;
+	}
+*/
+	bh = sb_bread(sb, ASSOOFS_INODESTORE_BLOCK_NUMBER);
+	// BUG_ON(!bh);
+
+	inode_iterator = (struct assoofs_inode *)bh->b_data;
+/*
+	if (mutex_lock_interruptible(&simplefs_sb_lock)) {
+		sfs_trace("Failed to acquire mutex lock\n");
+		return;
+	}
+*/
+	/* Append the new inode in the end in the inode store */
+	inode_iterator += assoofs_sb->inodes_count;
+
+	memcpy(inode_iterator, inode, sizeof(struct assoofs_inode));
+	assoofs_sb->inodes_count++;
+
+	mark_buffer_dirty(bh);
+	assoofs_sb_sync(sb);
+	brelse(bh);
+/*
+	mutex_unlock(&simplefs_sb_lock);
+	mutex_unlock(&simplefs_inodes_mgmt_lock);
+*/
+}
+
+struct assoofs_inode *assoofs_inode_search(struct super_block *sb, struct assoofs_inode *start, struct assoofs_inode *search) {
+
+	uint64_t count = 0;
+
+	while (
+		(start->inode_no != search->inode_no) &&
+		(count < ((struct assoofs_super_block *) sb->s_fs_info)->inodes_count)
+	) {
+		count++;
+		start++;
+	}
+
+	if (start->inode_no == search->inode_no) {
+		return start;
+	}
+
+	return NULL;
+}
+
+
+int assoofs_inode_save(struct super_block *sb, struct assoofs_inode *assoofs_inode) {
+	struct assoofs_inode *inode_iterator;
+	struct buffer_head *bh;
+
+	bh = sb_bread(sb, ASSOOFS_INODESTORE_BLOCK_NUMBER);
+	// BUG_ON(!bh);
+/*
+	if (mutex_lock_interruptible(&simplefs_sb_lock)) {
+		sfs_trace("Failed to acquire mutex lock\n");
+		return -EINTR;
+	}
+*/
+	inode_iterator = assoofs_inode_search(sb,
+		(struct assoofs_inode *)bh->b_data,
+		assoofs_inode);
+
+	if (likely(inode_iterator)) {
+		memcpy(inode_iterator, assoofs_inode, sizeof(*inode_iterator));
+		printk(KERN_INFO "The inode updated\n");
+
+		mark_buffer_dirty(bh);
+		sync_dirty_buffer(bh);
+	} else {
+		//mutex_unlock(&simplefs_sb_lock);
+		printk(KERN_ERR
+		       "The new filesize could not be stored to the inode.");
+		return -EIO;
+	}
+
+	brelse(bh);
+
+	//mutex_unlock(&simplefs_sb_lock);
+
+	return 0;
+}
+
+
+int assoofs_sb_get_a_freeblock(struct super_block *sb, uint64_t * out) {
+	struct assoofs_super_block *assoofs_sb = sb->s_fs_info;
 	int i;
 	int ret = 0;
 /*
@@ -347,26 +508,25 @@ int simplefs_sb_get_a_freeblock(struct super_block *vsb, uint64_t * out)
 */
 	/* Loop until we find a free block. We start the loop from 3,
 	 * as all prior blocks will always be in use */
-	for (i = 3; i < SIMPLEFS_MAX_FILESYSTEM_OBJECTS_SUPPORTED; i++) {
-		if (sb->free_blocks & (1 << i)) {
+	for (i = 3; i < ASSOOFS_FILESYSTEM_MAX_OBJECTS; i++) {
+		if (assoofs_sb->free_blocks & (1 << i)) {
 			break;
 		}
 	}
 
-	if (unlikely(i == SIMPLEFS_MAX_FILESYSTEM_OBJECTS_SUPPORTED)) {
+	if (unlikely(i == ASSOOFS_FILESYSTEM_MAX_OBJECTS)) {
 		printk(KERN_ERR "No more free blocks available");
 		ret = -ENOSPC;
-		goto end;
+		return ret;
 	}
 
 	*out = i;
 
 	/* Remove the identified block from the free list */
-	sb->free_blocks &= ~(1 << i);
+	assoofs_sb->free_blocks &= ~(1 << i);
 
-	assoofs_sb_sync(vsb);
+	assoofs_sb_sync(sb);
 
-end:
 	//mutex_unlock(&simplefs_sb_lock);
 	return ret;
 }
@@ -378,7 +538,7 @@ static int assoofs_create_fs_object(struct inode *dir, struct dentry *dentry, um
 	struct super_block *sb;
 	struct assoofs_inode *parent_dir_inode;
 	struct buffer_head *bh;
-	struct assoofs_dir_record *dir_contents_datablock;
+	struct assoofs_dir_record_entry *dir_contents_datablock;
 	uint64_t count;
 	int ret;
 
@@ -389,13 +549,13 @@ static int assoofs_create_fs_object(struct inode *dir, struct dentry *dentry, um
 	*/
 	sb = dir->i_sb;
 
-	count = ((struct assoofs_super_block_info *)sb->s_fs_info)->inodes_count;
+	count = ((struct assoofs_super_block *)sb->s_fs_info)->inodes_count;
 	/*if (ret < 0) {
 		mutex_unlock(&simplefs_directory_children_update_lock);
 		return ret;
 	}*/
 
-	if (count >= ASSOOFS_MAX_FILESYSTEM_OBJECTS_SUPPORTED) {
+	if (count >= ASSOOFS_FILESYSTEM_MAX_OBJECTS) {
 		/* The above condition can be just == instead of the >= */
 		printk(KERN_ERR
 		       "Maximum number of objects supported by simplefs is already reached");
@@ -452,16 +612,16 @@ static int assoofs_create_fs_object(struct inode *dir, struct dentry *dentry, um
 
 	assoofs_inode_add(sb, assoofs_inode);
 
-	parent_dir_inode dir->i_private;
+	parent_dir_inode = dir->i_private;
 	bh = sb_bread(sb, parent_dir_inode->data_block_number);
 	// BUG_ON(!bh);
 
-	dir_contents_datablock = (struct assoofs_dir_record *) bh->b_data;
+	dir_contents_datablock = (struct assoofs_dir_record_entry *) bh->b_data;
 
 	/* Navigate to the last record in the directory contents */
 	dir_contents_datablock += parent_dir_inode->dir_children_count;
 
-	dir_contents_datablock->inode_no = sfs_inode->inode_no;
+	dir_contents_datablock->inode_no = assoofs_inode->inode_no;
 	strcpy(dir_contents_datablock->filename, dentry->d_name.name);
 
 	mark_buffer_dirty(bh);
@@ -489,7 +649,7 @@ static int assoofs_create_fs_object(struct inode *dir, struct dentry *dentry, um
 	//mutex_unlock(&simplefs_inodes_mgmt_lock);
 	//mutex_unlock(&simplefs_directory_children_update_lock);
 
-	inode_init_owner(inode, dir, mode);
+	inode_init_owner(sb->s_user_ns, inode, dir, mode);
 	d_add(dentry, inode);
 
 	return 0;
@@ -500,49 +660,14 @@ static int assoofs_create(struct user_namespace *mnt_userns, struct inode *dir, 
 	printk(KERN_INFO "New file request\n");
 	return assoofs_create_fs_object(dir, dentry, mode);
 	// TODO
-	return 0;
+	//return 0;
 }
 
 static int assoofs_mkdir(struct user_namespace *mnt_userns, struct inode *dir , struct dentry *dentry, umode_t mode) {
 	printk(KERN_INFO "New directory request\n");
 	return assoofs_create_fs_object(dir, dentry, S_IFDIR | mode);
 	// TODO
-	return 0;
-}
-
-/**
- * A wrapper for inode deletion
- */
-int assoofs_delete_inode(struct inode *inode) {
-
-	int code;
-
-	info("Deleting inode\n");
-	
-	// use the libfs function
-	code = generic_delete_inode(inode);
-
-	info1("Inode deleted: code=%d\n", code);
-
-	return code;
-}
-
-struct assoofs_inode *assoofs_inode_search(struct super_block *sb, struct assoofs_inode *start, struct assoofs_inode *search) {
-
-	uint64_t count = 0;
-	while (
-		(start->inode_no != search->inode_no) &&
-		(count < ((struct assoofs_super_block *) sb->s_fs_info)->inodes_count)
-	) {
-		count++;
-		start++;
-	}
-
-	if (start->inode_no == search->inode_no) {
-		return start;
-	}
-
-	return NULL;
+	//return 0;
 }
 
 int assoofs_save_inode(struct super_block *sb, struct assoofs_inode *assoofs_inode) {
@@ -554,7 +679,8 @@ int assoofs_save_inode(struct super_block *sb, struct assoofs_inode *assoofs_ino
 
 	// search for the inode to update
 	struct buffer_head *bh;
-	struct assoofs_inode *data_inode = assoofs_inode_search(
+	struct assoofs_inode *data_inode;
+	data_inode = assoofs_inode_search(
 		sb, 
 		(struct assoofs_inode *) read_block(sb, &bh, ASSOOFS_INODESTORE_BLOCK_NUMBER), 
 		assoofs_inode
@@ -587,21 +713,25 @@ int assoofs_save_inode(struct super_block *sb, struct assoofs_inode *assoofs_ino
  */
 // TODO: CHECK USAGE
 struct assoofs_inode *assoofs_get_inode(struct super_block *sb, uint64_t inode_num) {
-	
-	info1("Getting inode number %llu\n", inode_num);
 
 	// prepare a default value to return
 	struct assoofs_inode *inode_buffer = NULL;
 
-	// get the inode block
 	struct buffer_head *bh;
-	struct assoofs_inode *assoofs_inode = (struct assoofs_inode *) read_block(sb, &bh, ASSOOFS_INODESTORE_BLOCK_NUMBER);
+	struct assoofs_inode *assoofs_inode;
+	struct assoofs_super_block *assoofs_sb;
+	int i;
+
+	// get the inode block
+	assoofs_inode = (struct assoofs_inode *) read_block(sb, &bh, ASSOOFS_INODESTORE_BLOCK_NUMBER);
+
+	info1("Getting inode number %llu\n", inode_num);
 	
 	// return the default value if the block hasn't been read
 	if (!assoofs_inode) return inode_buffer;
 
 	// get the superblock
-	struct assoofs_super_block *assoofs_sb = sb->s_fs_info;
+	assoofs_sb = sb->s_fs_info;
 
 /* TODO: mutex
 	if (mutex_lock_interruptible(&assoofs_inodes_mgmt_lock)) {
@@ -634,6 +764,28 @@ struct assoofs_inode *assoofs_get_inode(struct super_block *sb, uint64_t inode_n
 	// release resources and return the requested inode
 	brelse(bh);
 	return inode_buffer;
+}
+
+
+/**
+ * A wrapper for inode deletion
+ */
+// TODO: implement something that works
+int assoofs_delete_inode(struct inode *inode) {
+
+	int code;
+
+	info("Deleting inode\n");
+	
+	// use the libfs function (DOES ABSOLUTELY NOTHING)
+	code = generic_delete_inode(inode);
+
+	if (code)
+		info1("Failed to delete inode. code=%d\n", code);
+	else
+		info("Inode deleted correctly\n");
+
+	return code;
 }
 
 /**
@@ -718,7 +870,6 @@ int assoofs_fill_super(struct super_block *sb, void *data, int silent) {
 	return 0;
 }
 
-
 /**
  * Mount an assoofs device
  */
@@ -752,7 +903,6 @@ static void assoofs_kill_block_super(struct super_block *sb) {
 
 	info("Superblock destroyed. Filesystem unmounted\n");
 }
-
 
 /**
  * Register the filesystem and check for errors

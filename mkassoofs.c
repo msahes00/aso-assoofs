@@ -80,7 +80,7 @@ static int write_root_inode(int fd) {
 	#endif
 
 	// Write the root inode to file and check for errors
-	printf("Writing the inode store\n")
+	printf("Writing the inode store\n");
 	byte_count = write(fd, &root_inode, sizeof(root_inode));
 
 	if (byte_count != sizeof(root_inode)) {
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
 	char welcomefile_content[] = "Hello world from " ASSOOFS_NAME;
 	ssize_t welcomefile_size = sizeof(welcomefile_content) - 1; // dont write the "\0"
 	
-	struct assoofs_inode welcome_inode = {
+	struct assoofs_inode welcomefile_inode = {
 		.mode = S_IFREG,
 		.inode_no = WELCOMEFILE_INODE_NUMBER,
 		.data_block_number = WELCOMEFILE_BLOCK_NUMBER,
@@ -202,10 +202,10 @@ int main(int argc, char *argv[]) {
 		if (write_root_inode(fd)) 
 			break;
 		
-		if (write_welcome_inode(fd, &welcome)) 
+		if (write_welcome_inode(fd, &welcomefile_inode)) 
 			break;
 
-		if (write_dirent(fd, &record)) 
+		if (write_dirent(fd, &welcomefile_record)) 
 			break;
 		
 		if (write_block(fd, welcomefile_content, welcomefile_size)) 

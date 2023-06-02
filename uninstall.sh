@@ -94,16 +94,16 @@ echo -e "\033[32m UNINSTALLING DEPENDENCIES \033[0m"
 showConfirm "Uninstall dependencies? (yes / no)"
 if [ $option -eq "0" ] ; then
 
+	# TODO: check
 	sudo apt autoremove build-essential dwarves -y
-	# TODO: update dependencies
-	#sudo add-apt-repository --remove universe -y
-	#rm /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+	sudo add-apt-repository --remove universe -y
+	sudo rm /usr/lib/modules/`uname -r`/build/vmlinux
 
 fi
 
 # check messages
 echo -e "\033[32m PRINTING MESSAGES \033[0m"
-sudo dmesg | grep "assoofs"
+sudo dmesg --color=always | grep "assoofs"
 
 # show a message
 echo "DONE"

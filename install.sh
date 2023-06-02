@@ -8,11 +8,10 @@ sudo /bin/bash -c ":"
 echo -e "\033[32m INSTALLING DEPENDENCIES \033[0m"
 sudo add-apt-repository universe -y
 sudo apt install build-essential dwarves -y
-cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 # compile all files
 echo -e "\033[32m COMPILING FILES \033[0m"
-# TODO: use the linux repo to compile the module?
 sudo make
 
 # install the kernel module to the kernel
@@ -35,7 +34,7 @@ sudo chmod -R 777 .
 
 # check messages
 echo -e "\033[32m PRINTING MESSAGES \033[0m"
-sudo dmesg | grep "assoofs"
+sudo dmesg --color=always | grep "assoofs"
 
 # show a message
 echo "DONE"
