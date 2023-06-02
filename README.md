@@ -1,4 +1,4 @@
-# aso-sssoofs
+# aso-asssoofs
 
 A custom filesystem
 
@@ -8,7 +8,7 @@ Use `install.sh` to load and `uninstall.sh` to remove the kernel module.
 
 `install.sh` will also create a demo filesystem for easy testing.
 
-> **Important**: Currently tested on Linux kernel version 5.19.0-38-generic and 5.15.0-25-generic
+> **Important**: Currently tested on Linux kernel version 5.19.0-43-generic, 5.19.0-38-generic and 5.15.0-25-generic
 
 ## Extra
 

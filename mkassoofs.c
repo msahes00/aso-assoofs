@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// workaround for the timespec64
+#define timespec64 timespec
+
 #include "assoofs.h"
 
 /**

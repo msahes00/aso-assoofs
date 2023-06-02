@@ -43,10 +43,10 @@ struct assoofs_dir_record_entry {
  * The inode structure
  */
 struct assoofs_inode {
-	// TODO: ADD TIME FIELD
 	mode_t mode;                // The kind of inode (directory, file...)
 	uint64_t inode_no;          // The corresponding inode
 	uint64_t data_block_number; // The corresponding data block
+	struct timespec64 time;     // The time the inode was created
 
 	union {
 		uint64_t file_size;             // The size of the file in bytes

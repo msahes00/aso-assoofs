@@ -61,11 +61,6 @@ function showConfirm() {
 echo -e "\033[32m ACQUIRING ROOT \033[0m"
 sudo /bin/bash -c ":"
 
-# uninstall the kernel module to the kernel
-echo -e "\033[32m UNINSTALLING KERNEL MODULE \033[0m"
-sudo rmmod assoofs.ko
-
-
 # clean workspace
 echo -e "\033[32m CLEANING FILES \033[0m"
 sudo make clean
@@ -100,6 +95,10 @@ if [ $option -eq "0" ] ; then
 	sudo rm /usr/lib/modules/`uname -r`/build/vmlinux
 
 fi
+
+# uninstall the kernel module to the kernel
+echo -e "\033[32m UNINSTALLING KERNEL MODULE \033[0m"
+sudo rmmod assoofs.ko
 
 # check messages
 echo -e "\033[32m PRINTING MESSAGES \033[0m"
