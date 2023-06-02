@@ -14,9 +14,10 @@ Use `install.sh` to load and `uninstall.sh` to remove the kernel module.
 
 The practice currently contains the following optional parts completed
 - [ ] Inode cache: TODO
-- [ ] Mutexes: TODO
+- [x] Mutexes: completed
 - [ ] Inode deletion: TODO
-- [ ] Time stamps storing: TODO, not in script
+- [x] Time stamps storing: completed, not in script
+- [ ] Create the filesystem block by block, with or without the welcome file: TODO
 
 ## Credits
 

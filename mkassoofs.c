@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // workaround for the timespec64
 #define timespec64 timespec
@@ -74,6 +75,7 @@ static int write_root_inode(int fd) {
 	root_inode.mode = S_IFDIR;
 	root_inode.inode_no = ASSOOFS_ROOTDIR_INODE_NUMBER;
 	root_inode.data_block_number = ASSOOFS_ROOTDIR_BLOCK_NUMBER;
+	clock_gettime(CLOCK_REALTIME, &root_inode.time);
 
 	// Set the children count correctly
 	#if WELCOMEFILE_WRITE
@@ -182,6 +184,9 @@ int main(int argc, char *argv[]) {
 		.filename = WELCOMEFILE_FILENAME,
 		.inode_no = WELCOMEFILE_INODE_NUMBER,
 	};
+
+	// set the time
+	clock_gettime(CLOCK_REALTIME, &welcomefile_inode.time);
 
 
 	// Verify the parameters
