@@ -622,7 +622,7 @@ struct dentry *assoofs_lookup(struct inode *parent_inode, struct dentry *child_d
 			if (mutex_lock_interruptible(&assoofs_super_lock)) {
 
 				error("Failed to acquire superblock mutex\n");
-				brelse(bh)
+				brelse(bh);
 				return NULL;
 			}
 			if (mutex_lock_interruptible(&assoofs_inode_lock)) {
@@ -856,7 +856,7 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
 	if (mutex_lock_interruptible(&assoofs_super_lock)) {
 
 		error("Failed to acquire superblock mutex\n");
-		brelse(bh)
+		brelse(bh);
 		return 0;
 	}
 	if (mutex_lock_interruptible(&assoofs_inode_lock)) {
