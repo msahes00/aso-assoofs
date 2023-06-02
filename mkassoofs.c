@@ -16,7 +16,7 @@
  * Some constants
  */
 #define WELCOMEFILE_WRITE           1                                   // Whether to write the welcome file or not
-#define WELCOMEFILE_FILENAME        "readme.txt"                        // The filename for the welcome file
+#define WELCOMEFILE_FILENAME        "README.txt"                        // The filename for the welcome file
 #define WELCOMEFILE_BLOCK_NUMBER    (ASSOOFS_LAST_RESERVED_BLOCK + 1)   // The block number for the welcome file
 #define WELCOMEFILE_INODE_NUMBER    (ASSOOFS_LAST_RESERVED_INODE + 1)   // The inode number for the welcome file
 
