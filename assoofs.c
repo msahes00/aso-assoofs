@@ -138,7 +138,7 @@ ssize_t assoofs_read(struct file * file, char __user * buf, size_t len, loff_t *
 	size_t left;
 	int nbytes;
 
-	info3("Trying to read %d bytes from file '%s', starting from byte %d\n", len, file->f_path.dentry->d_name.name, *pos);
+	info3("Trying to read %lu bytes from file '%s', starting from byte %llu\n", len, file->f_path.dentry->d_name.name, *pos);
 
 	// prevent reading data outside the file
 	if (*pos >= inode->file_size) {
@@ -195,7 +195,7 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
 	struct buffer_head *bh;
 	char *buffer;
 
-	info3("Trying to write %d bytes from file '%s', starting from byte %d\n", len, file->f_path.dentry->d_name.name, *pos);
+	info3("Trying to write %lu bytes from file '%s', starting from byte %llu\n", len, file->f_path.dentry->d_name.name, *pos);
 	
 	// verify the amount of space to write
 	if (*pos + len >= ASSOOFS_BLOCK_SIZE) {
@@ -234,7 +234,7 @@ ssize_t assoofs_write(struct file * file, const char __user * buf, size_t len, l
 	inode->file_size = *pos;
 	assoofs_save_inode(sb, inode);
 
-	info2("Written %d bytes to file '%s'\n", len, file->f_path.dentry->d_name.name);
+	info2("Written %lu bytes to file '%s'\n", len, file->f_path.dentry->d_name.name);
 
 	// release resources and return the amount of bytes read
 	brelse(bh);
@@ -360,7 +360,7 @@ static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoof
 	struct timespec64 time_now;
 	struct inode *inode;
 
-	info2("Converting inode (%llu -> %lu)\n", assoofs_inode->inode_no, inode_num);
+	info2("Converting inode (%llu -> %d)\n", assoofs_inode->inode_no, inode_num);
 
 	// create the linux inode and initialize it
 	inode = new_inode(sb);
@@ -383,7 +383,7 @@ static struct inode *assoofs_convert_inode(struct super_block *sb, struct assoof
 	else
 		error("Error converting inode: unknown inode type.\n");
 
-	info2("Inode (%llu, %lu) converted\n", assoofs_inode->inode_no, inode_num);
+	info2("Inode (%llu, %d) converted\n", assoofs_inode->inode_no, inode_num);
 
 	return inode;
 }
@@ -741,7 +741,7 @@ struct assoofs_inode *assoofs_get_inode(struct super_block *sb, uint64_t inode_n
 	}
 */
 	// iterate over all inodes until the requested inode is found
-	for (int i = 0; i < assoofs_sb->inodes_count; i++) {
+	for (i = 0; i < assoofs_sb->inodes_count; i++) {
 
 		// when found, copy it to the buffer, and exit the loop
 		if (assoofs_inode->inode_no == inode_num) {
